@@ -13,12 +13,10 @@ declare(strict_types = 1);
 namespace PHPinnacle\Amridge;
 
 use function Amp\asyncCall, Amp\call, Amp\Socket\connect;
-use Amp\Deferred;
 use Amp\Loop;
 use Amp\Promise;
 use Amp\Socket\ClientConnectContext;
 use Amp\Socket\Socket;
-use PHPinnacle\Amridge\Call;
 
 final class Connection
 {
@@ -127,8 +125,6 @@ final class Connection
                     $this->parser->append($chunk);
 
                     while ($frame = $this->parser->parse()) {
-                        var_dump($frame);
-
                         if (!isset($this->callbacks[$frame->seq])) {
                             continue 2;
                         }

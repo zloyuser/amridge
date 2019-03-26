@@ -47,11 +47,13 @@ final class Parser
             return null;
         }
 
-        $flags   = $this->buffer->readUint8(0);
-
-        // $sizeLE = $this->buffer->readUint64(9); TODO check size
-
-        $sizeBE  = $this->buffer->readUint64(9);
+        $flags  = $this->buffer->readUint8(0);
+        $sizeLE = \unpack("P", $this->buffer->read(8, 1))[1];
+        $sizeBE = $this->buffer->readUint64(9);
+    
+        if ($sizeLE !== $sizeBE) {
+            throw new Exception\PrefixException("invalid prefix (checksum)");
+        }
 
         if ($this->buffer->size() < $sizeBE + 17) {
             return null;
@@ -60,7 +62,7 @@ final class Parser
         $this->buffer->discard(17);
 
         $method = $this->buffer->consume($sizeBE - 8);
-        $seq    = (int) \unpack("P", $this->buffer->consume(8));
+        $seq    = \unpack("P", $this->buffer->consume(8))[1];
         $body   = $this->consumeBody();
 
         return new Frame($seq, $method, $body, $flags);
@@ -72,12 +74,19 @@ final class Parser
      */
     private function consumeBody(): string
     {
-        $flags = $this->buffer->consumeUint8();
-
-        $this->buffer->discard(8); // TODO check size
-
+        $flags  = $this->buffer->consumeUint8();
+        $sizeLE = \unpack("P", $this->buffer->consume(8))[1];
         $sizeBE = $this->buffer->consumeUint64();
+        $body   = $this->buffer->consume($sizeBE);
 
-        return $this->buffer->consume($sizeBE);
+        if ($sizeLE !== $sizeBE) {
+            throw new Exception\PrefixException("invalid prefix (checksum)");
+        }
+
+        if ($flags & Frame::PAYLOAD_ERROR && $flags & Frame::PAYLOAD_RAW) {
+            throw new Exception\ServiceException("error '$body' on '{$this->relay}'");
+        }
+
+        return $flags & Frame::PAYLOAD_RAW ? $body : \json_decode($body, true);
     }
 }
